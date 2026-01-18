@@ -5,6 +5,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <style>
       html {
         width: 100%;
@@ -90,6 +91,31 @@
           },
         });
         player.setSize(window.innerWidth, window.innerHeight);
+
+        // Ensure YouTube iframes have proper referrer policy to fix Error 153
+        function ensureReferrerPolicy() {
+          var iframes = document.getElementsByTagName('iframe');
+          for (var i = 0; i < iframes.length; i++) {
+            var iframe = iframes[i];
+            if (!iframe.hasAttribute('referrerpolicy')) {
+              iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            }
+          }
+        }
+
+        // Initial set after player is ready
+        setTimeout(ensureReferrerPolicy, 100);
+
+        // Watch for dynamically created iframes (YouTube API creates iframes asynchronously)
+        var observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.addedNodes.length) {
+              ensureReferrerPolicy();
+            }
+          });
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
       }
 
       window.addEventListener('message', (event) => {
