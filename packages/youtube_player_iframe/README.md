@@ -118,6 +118,50 @@ YoutubePlayerScaffold(
 
 See the [example app](example/lib/main.dart) for detailed usage.
 
+## Fixing "Sign in to confirm you're not a bot" and Error 152-4
+
+If you encounter YouTube's "Sign in to confirm you're not a bot" message or Error 152-4, this is typically caused by missing HTTP Referer headers when the player is loaded from local assets. The solution is to host the player HTML on your own server.
+
+### Solution: Host player.html on Your Server
+
+1. **Copy the remote player HTML file** from the package assets:
+   - Location: `packages/youtube_player_iframe/assets/player_remote.html`
+   - Deploy this file to your HTTPS server (e.g., `https://your-domain.com/youtube-player/player.html`)
+
+2. **Configure CORS headers** on your server:
+   ```
+   Access-Control-Allow-Origin: *
+   ```
+
+3. **Use the `playerUrl` parameter** in your app:
+
+```dart
+final _controller = YoutubePlayerController(
+  params: YoutubePlayerParams(
+    playerUrl: 'https://your-domain.com/youtube-player/player.html',
+    // ... other params
+  ),
+);
+```
+
+### Why This Works
+
+When the player HTML is loaded from a local asset bundle:
+- The page has no proper origin/domain
+- No Referer header is sent to YouTube
+- YouTube's bot detection is triggered
+
+By hosting the HTML on your own domain:
+- The page has a proper origin (`https://your-domain.com`)
+- Browsers/WebViews automatically send proper Referer headers
+- YouTube can verify the request source
+
+### Limitations
+
+- Users behind VPNs/proxies may still see bot detection (this is YouTube-side restriction)
+- Requires network connectivity to load the player HTML
+- Your server must be properly configured with HTTPS and CORS
+
 ## Inherit the controller to descendant widgets
 The package provides `YoutubePlayerControllerProvider`.
 

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>YouTube Player</title>
+    <style>
+      html {
+        width: 100%;
+        height: 100%;
+        pointer-events: auto;
+      }
+
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: inherit;
+        background: #000;
+      }
+
+      .embed-container iframe,
+      .embed-container object,
+      .embed-container embed {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100% !important;
+        height: 100% !important;
+        pointer-events: inherit;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="embed-container">
+      <div id="player"></div>
+    </div>
+
+    <script>
+      // Parse URL parameters
+      var urlParams = new URLSearchParams(window.location.search);
+
+      // Read configuration from URL params
+      var playerId = urlParams.get('playerId') || 'player';
+      var pointerEvents = urlParams.get('pointerEvents') || 'auto';
+      var platform = urlParams.get('platform') || 'web';
+      var host = urlParams.get('host') || 'https://www.youtube.com';
+
+      // Build playerVars from query parameters
+      var playerVars = {
+        autoplay: parseInt(urlParams.get('autoplay')) || 1,
+        mute: parseInt(urlParams.get('mute')) || 0,
+        cc_lang_pref: urlParams.get('cc_lang_pref') || 'en',
+        cc_load_policy: parseInt(urlParams.get('cc_load_policy')) || 1,
+        color: urlParams.get('color') || 'white',
+        controls: parseInt(urlParams.get('controls')) || 1,
+        disablekb: parseInt(urlParams.get('disablekb')) || 0,
+        enablejsapi: 1,
+        fs: parseInt(urlParams.get('fs')) || 0,
+        hl: urlParams.get('hl') || 'en',
+        iv_load_policy: parseInt(urlParams.get('iv_load_policy')) || 1,
+        loop: parseInt(urlParams.get('loop')) || 0,
+        modestbranding: 1,
+        origin: window.location.origin,
+        playsinline: parseInt(urlParams.get('playsinline')) || 1,
+        rel: parseInt(urlParams.get('rel')) || 0,
+        widget_referrer: window.location.origin,
+      };
+
+      // Apply pointer events style
+      document.documentElement.style.pointerEvents = pointerEvents;
+
+      var tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      var firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+      var player;
+      var timerId;
+
+      // Wait for JavaScript channel to be available (needed for remote URLs)
+      function waitForChannel(callback, maxAttempts) {
+        maxAttempts = maxAttempts || 50;
+        var attempts = 0;
+
+        function check() {
+          attempts++;
+          if (platform === 'web' || window[playerId]) {
+            callback();
+          } else if (attempts < maxAttempts) {
+            setTimeout(check, 100);
+          } else {
+            callback(); // Continue anyway
+          }
+        }
+        check();
+      }
+
+      function onYouTubeIframeAPIReady() {
+        player = new YT.Player("player", {
+          host: host,
+          width: "100%",
+          height: "100%",
+          videoId: urlParams.get('videoId') || '',
+          playerVars: playerVars,
+          events: {
+            onReady: function (event) {
+              waitForChannel(function() {
+                handleFullScreenForMobilePlatform();
+                sendMessage('Ready', event);
+              });
+            },
+            onStateChange: function (event) {
+              clearTimeout(timerId);
+              sendMessage('StateChange', event.data);
+              if (event.data == 1) {
+                timerId = setInterval(function () {
+                  var state = {
+                    'currentTime': player.getCurrentTime(),
+                    'loadedFraction': player.getVideoLoadedFraction()
+                  };
+
+                  sendMessage('VideoState', JSON.stringify(state));
+                }, 100);
+              }
+            },
+            onPlaybackQualityChange: function (event) {
+              sendMessage('PlaybackQualityChange', event.data);
+            },
+            onPlaybackRateChange: function (event) {
+              sendMessage('PlaybackRateChange', event.data);
+            },
+            onApiChange: function (event) {
+              sendMessage('ApiChange', event.data);
+            },
+            onError: function (event) {
+              sendMessage('PlayerError', event.data);
+            },
+            onAutoplayBlocked: function (event) {
+              sendMessage('AutoplayBlocked', event.data);
+            },
+          },
+        });
+        player.setSize(window.innerWidth, window.innerHeight);
+
+        // Ensure YouTube iframes have proper referrer policy
+        function ensureReferrerPolicy() {
+          var iframes = document.getElementsByTagName('iframe');
+          for (var i = 0; i < iframes.length; i++) {
+            var iframe = iframes[i];
+            if (!iframe.hasAttribute('referrerpolicy')) {
+              iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            }
+          }
+        }
+
+        setTimeout(ensureReferrerPolicy, 100);
+
+        var observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.addedNodes.length) {
+              ensureReferrerPolicy();
+            }
+          });
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+
+      window.addEventListener('message', (event) => {
+        try {
+          var data = JSON.parse(event.data);
+
+          if(data.function){
+            var rawFunction = data.function.replaceAll('<<quote>>', '"');
+            var result = eval(rawFunction);
+
+            if(data.key) {
+              var message = {}
+              message[data.key] = result
+              var messageString = JSON.stringify(message);
+
+              event.source.postMessage(messageString , '*');
+            }
+          }
+        } catch (e) { }
+      }, false);
+
+      window.onresize = function () {
+        player.setSize(window.innerWidth, window.innerHeight);
+      };
+
+      function sendPlatformMessage(message) {
+        try {
+          switch(platform) {
+             case 'android':
+               if (window[playerId]) {
+                 window[playerId].postMessage(message);
+               }
+               break;
+             case 'ios':
+               if (window[playerId]) {
+                 window[playerId].postMessage(message, '*');
+               }
+               break;
+             case 'web':
+             default:
+               window.parent.postMessage(message, '*');
+               break;
+           }
+        } catch (e) { }
+      }
+
+      function sendMessage(key, data) {
+         var message = {};
+         message[key] = data;
+         message['playerId'] = playerId;
+         var messageString = JSON.stringify(message);
+
+         sendPlatformMessage(messageString);
+      }
+
+      function getVideoData() {
+        return prepareDataForPlatform(player.getVideoData());
+      }
+
+      function getPlaylist() {
+        return prepareDataForPlatform(player.getPlaylist());
+      }
+
+      function getAvailablePlaybackRates(){
+        return prepareDataForPlatform(player.getAvailablePlaybackRates());
+      }
+
+      function prepareDataForPlatform(data) {
+        if(platform == 'android') return data;
+
+        return JSON.stringify(data);
+      }
+
+      function handleFullScreenForMobilePlatform() {
+        if(platform != 'web') {
+          try {
+            var ytFrame = document.getElementsByTagName('iframe')[0].contentWindow.document;
+            var fsButton = ytFrame.getElementsByClassName('ytp-fullscreen-button ytp-button')[0];
+
+            if(fsButton != null) {
+              var fsButtonCopy = fsButton.cloneNode(true);
+              fsButton.replaceWith(fsButtonCopy);
+              fsButtonCopy.onclick = function() {
+                sendMessage('FullscreenButtonPressed', '');
+              };
+            }
+          } catch (e) {
+            // Cross-origin access blocked - fullscreen works via YouTube's native button
+          }
+        }
+      }
+    </script>
+  </body>
+</html>

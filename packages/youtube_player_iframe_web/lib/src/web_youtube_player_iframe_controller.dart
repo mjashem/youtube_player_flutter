@@ -225,7 +225,8 @@ extension type YoutubeIframeElement._(HTMLIFrameElement element) {
           ..style.width = '100%'
           ..style.height = '100%'
           ..style.border = 'none'
-          ..allow = 'autoplay;fullscreen';
+          ..allow = 'autoplay;fullscreen'
+          ..referrerPolicy = 'strict-origin-when-cross-origin';
 
   /// The underlying [HTMLIFrameElement] used by the [YoutubeIframeElement].
   String get id => element.id;

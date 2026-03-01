@@ -110,6 +110,36 @@ class YoutubePlayerParams {
   /// The user agent for the player.
   final String? userAgent;
 
+  /// URL to a remotely hosted player.html file.
+  ///
+  /// When provided, the player will load the HTML from this URL instead of
+  /// from the bundled asset. This is useful for fixing YouTube's
+  /// "Sign in to confirm you're not a bot" errors and Error 152-4, which
+  /// occur when the player is loaded from a local source without a proper
+  /// origin/referer header.
+  ///
+  /// The remote player.html must:
+  /// - Be served over HTTPS
+  /// - Have CORS headers allowing your app's origin
+  /// - Read configuration from URL query parameters
+  ///
+  /// Example usage:
+  /// ```dart
+  /// YoutubePlayerParams(
+  ///   playerUrl: 'https://your-domain.com/youtube-player/player.html',
+  /// )
+  /// ```
+  ///
+  /// See the package README for details on setting up a remote player.
+  final String? playerUrl;
+
+  /// Initial video ID to load when using [playerUrl].
+  ///
+  /// When using a remote player URL, pass the video ID here to have it
+  /// loaded immediately via URL parameters. This ensures the video loads
+  /// even if JavaScript channel communication has issues.
+  final String? videoId;
+
   /// Defines player parameters for the youtube player.
   const YoutubePlayerParams({
     this.mute = false,
@@ -128,6 +158,8 @@ class YoutubePlayerParams {
     this.playsInline = true,
     this.strictRelatedVideos = false,
     this.userAgent,
+    this.playerUrl,
+    this.videoId,
   });
 
   /// Creates [Map] representation of [YoutubePlayerParams].
@@ -160,6 +192,37 @@ class YoutubePlayerParams {
 
   /// The serialized JSON representation of the [YoutubePlayerParams].
   String toJson() => jsonEncode(toMap());
+
+  /// Creates URL query parameters for remote player.html.
+  ///
+  /// This is used when loading the player from a remote URL via [playerUrl].
+  Map<String, String> toQueryParams({String playerId = 'player'}) {
+    final params = <String, String>{
+      'playerId': playerId,
+      'autoplay': '1',
+      'mute': _boolean(mute).toString(),
+      'cc_lang_pref': captionLanguage,
+      'cc_load_policy': _boolean(enableCaption).toString(),
+      'color': color,
+      'controls': _boolean(showControls).toString(),
+      'disablekb': _boolean(!enableKeyboard).toString(),
+      'enablejsapi': '1',
+      'fs': _boolean(showFullscreenButton).toString(),
+      'hl': interfaceLanguage,
+      'iv_load_policy': showVideoAnnotations ? '1' : '3',
+      'loop': _boolean(loop).toString(),
+      'modestbranding': '1',
+      'playsinline': _boolean(playsInline).toString(),
+      'rel': _boolean(!strictRelatedVideos).toString(),
+      'pointerEvents': pointerEvents.name,
+      if (videoId != null && videoId!.isNotEmpty) 'videoId': videoId!,
+    };
+
+    // Remove empty values
+    params.removeWhere((key, value) => value.isEmpty);
+
+    return params;
+  }
 
   int _boolean(bool value) => value ? 1 : 0;
 }

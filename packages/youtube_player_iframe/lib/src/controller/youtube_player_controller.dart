@@ -259,12 +259,37 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
   /// Loads the player with the given [params].
   ///
   /// [baseUrl] sets the origin for the iframe player.
+  ///
+  /// If [YoutubePlayerParams.playerUrl] is provided, the player will be loaded
+  /// from the remote URL with configuration passed as query parameters. This
+  /// is recommended for fixing YouTube's "Sign in to confirm you're not a bot"
+  /// errors and Error 152-4.
   Future<void> load({
     required YoutubePlayerParams params,
     String? baseUrl,
     String id = 'player',
   }) async {
     final platform = kIsWeb ? 'web' : defaultTargetPlatform.name.toLowerCase();
+
+    // If a remote player URL is provided, use it instead of bundled HTML
+    if (params.playerUrl != null && params.playerUrl!.isNotEmpty) {
+      final queryParams = params.toQueryParams(playerId: id)
+        ..addAll({
+          'platform': platform,
+          'host': params.origin ?? 'https://www.youtube.com',
+        });
+
+      final queryString = queryParams.entries
+          .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+          .join('&');
+
+      final url = '${params.playerUrl}?$queryString';
+
+      await webViewController.loadRequest(Uri.parse(url));
+      return;
+    }
+
+    // Fall back to bundled HTML loaded via loadHtmlString
     final playerData = {
       'playerId': id,
       'pointerEvents': params.pointerEvents.name,

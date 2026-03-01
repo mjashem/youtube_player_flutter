@@ -24,6 +24,7 @@ dev_dependencies:
 flutter:
   assets:
     - assets/player.html
+    - assets/player_remote.html
 
   plugin:
     platforms:
